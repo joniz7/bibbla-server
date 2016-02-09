@@ -1,0 +1,10 @@
+{
+	"name": "bibbla-server",
+	"version": "0.0.1",
+	"main": "server.js",
+	"author": "jonis",
+	"dependencies": {
+		"request": "latest",
+		"cheerio": "latest"
+	}
+}
