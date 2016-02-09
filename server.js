@@ -31,49 +31,76 @@ if (!String.prototype.includes) {
 
 http.createServer(function(req, res) {
 	if(req.method == "GET") {
-		if(req.url === "/people") {
-			res.writeHead(200, {"Content-Type":"application/javascript"});
-			var jsonString = '{"people": [';
-			for(var i in persons) {
-				jsonString += writeObject(persons[i])+',';
-			}
-			jsonString = jsonString.slice(0, jsonString.length-1) + ']}';
+		if(req.url.includes("/search/")) {
+			var end = req.url.lastIndexOf("?");
+			var searchStr = req.url.substring(req.url.lastIndexOf("/")+1, (end < 0 ? req.url.length : end));
 
-			res.end("fun("+jsonString+");");
-		} else if(req.url.includes("/search/")) {
-
-			//var search = "http://www.gotlib.goteborg.se/search*swe/X?searchtype=X&searcharg=dino&searchscope=6&SUBMIT=S%C3%B6k";
-
-
-			var searchStr = req.url.substring(req.url.lastIndexOf("/")+1, req.url.length);
+			console.log("Got search request for "+searchStr);
 
 			request('http://www.gotlib.goteborg.se/search*swe/X?searchtype=X&searcharg='+searchStr, function(error, response, body){
 				if(!error && response.statusCode == 200) {
-					res.writeHead(200, {"Content-Type":"text/html"});
+					res.writeHead(200, {"Content-Type":"application/javascript"});
 
-					
 					$ = cheerio.load(body);
 					
-					var potBooks = $('.sokresultat');
-
-					var html = "";
-
+					var potBooks = $('.sokresultat');	
+					var result = "bsearch([";
+					
 					potBooks.each(function(index, elem){
-						var auth = $(elem).find('strong').html();
-						if(auth != null) {
-							html += auth +"\n";	
+						var book = (result.length > 9 ? ",{" : "{");
+						var strong = $(elem).find('strong');
+						var author = strong.first().html()
+						
+						// make sure we only get the one we are interested in
+						if($(elem).find('font').length != 1) {
+							return true;
 						}
+
+						var firstAttr = true;
+
+						if(strong.last() != null) {
+							var section = strong.last().html();
+						}
+						
+						var title = $(elem).find('a').html();
+
+						if(author) {
+							book += writeProperty("author", author.replace("\n", ""));
+							firstAttr = false;
+						}
+						
+						if(section) {
+							book += (!firstAttr ? "," : "") + writeProperty("section", section.replace("\n", ""));
+							firstAttr = false;
+						}
+
+						if(title) {
+							book += (!firstAttr ? "," : "") + writeProperty("title", title.replace("\n", ""));
+							firstAttr = false;	
+						}
+
+						book += "}";
+
+						if(book.length > 3)
+							result += book;
 					});
 
-					res.end($.html());
+					res.end(result + "]);");
 				} else {
 					res.writeHead(404, {"Content-Type":"text/html"});
 					res.end("<html><body>We ain't found shit</body></html>");
 				}
 			});
-		} else {
+		} else if (req.url == "/") {
 			res.writeHead(200, {"Content-Type":"text/html"});
 			res.end(html);
+		} else {
+			var searchStr = req.url.substring(req.url.lastIndexOf("/")+1, req.url.length);
+
+			request('http://www.gotlib.goteborg.se/search*swe/X?searchtype=X&searcharg='+searchStr, function(error, response, body){
+				$ = cheerio.load(body);
+				res.end($.html());
+			});
 		}
 	}
 	
@@ -81,11 +108,15 @@ http.createServer(function(req, res) {
 	console.log("Server up at http://"+hostname+":"+port);
 });
 
+function writeProperty(prop, value) {
+	return prop+":"+(typeof(value) == 'string' ? '"' : '')+value+(typeof(value) == 'string' ? '"' : '');
+}
+
 function writeObject(obj) {
 	var ret = "{";
 
 	for(var a in obj) {
-		ret += '"'+a+'":'+'"'+obj[a]+'"'+',';
+		ret += writeProperty(a, obj[a]);
 	}
 
 	ret = ret.slice(0, ret.length-1);
